@@ -1,0 +1,1 @@
+scoreboard objectives add sgg_area dummy

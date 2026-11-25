@@ -1,0 +1,22 @@
+modLoader="javafml"
+loaderVersion="[47,48)"
+license="MIT"
+[[mods]]
+modId="mineboost"
+version="1.0.0"
+displayName="MineBoost"
+authors="MineBoost contributors"
+displayTest="IGNORE_ALL_VERSION"
+description='''Server-side tag-based mining speed and block loot multipliers.'''
+[[dependencies.mineboost]]
+modId="forge"
+mandatory=true
+versionRange="[47,48)"
+ordering="NONE"
+side="BOTH"
+[[dependencies.mineboost]]
+modId="minecraft"
+mandatory=true
+versionRange="[1.20.1,1.20.2)"
+ordering="NONE"
+side="BOTH"
