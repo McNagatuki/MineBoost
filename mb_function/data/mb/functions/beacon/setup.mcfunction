@@ -1,0 +1,1 @@
+scoreboard objectives add beacon_mined minecraft.mined:minecraft.beacon

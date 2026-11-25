@@ -1,0 +1,1 @@
+summon minecraft:armor_stand ~ ~ ~ {Invisible:true,Invulnerable:true,NoBasePlate:true,NoGravity:true,CustomName:'{"text":"blue_spawn"}'}

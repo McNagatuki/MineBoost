@@ -1,0 +1,1 @@
+title @a actionbar [{"score":{"name":"ngtk_timer","objective":"ngtk_timer_m"},"color":"gray"},{"text":"分"},{"score":{"name":"ngtk_timer","objective":"ngtk_timer_s"}},{"text":"秒"}]

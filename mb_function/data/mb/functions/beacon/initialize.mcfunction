@@ -1,0 +1,1 @@
+scoreboard players set @a beacon_mined 0

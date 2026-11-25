@@ -1,0 +1,1 @@
+title @a actionbar [{"text":"残り ","color":"gray"},{"score":{"name":"ngtk_counter","objective":"ngtk_counter_m"}},{"text":"分"},{"score":{"name":"ngtk_counter","objective":"ngtk_counter_s"}},{"text":"秒"}]

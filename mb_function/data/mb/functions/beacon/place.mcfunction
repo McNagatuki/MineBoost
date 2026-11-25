@@ -1,0 +1,2 @@
+execute at @e[type=minecraft:armor_stand,name=beacon] unless block ~ ~ ~ minecraft:beacon run setblock ~ ~ ~ minecraft:beacon replace
+execute at @e[type=minecraft:armor_stand,name=beacon] unless block ~ ~-1 ~ minecraft:bedrock run fill ~-1 ~-1 ~-1 ~1 ~-1 ~1 minecraft:bedrock replace
