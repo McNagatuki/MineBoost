@@ -16,7 +16,7 @@ import net.minecraft.world.level.block.CocoaBlock;
 import net.minecraft.world.level.block.CropBlock;
 import net.minecraft.world.level.block.NetherWartBlock;
 import net.minecraft.world.level.block.SweetBerryBushBlock;
-import net.minecraft.world.level.block.piston.PistonStructureResolver;
+import net.minecraft.world.level.block.piston.PistonMovingBlockEntity;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.chunk.LevelChunk;
 import net.minecraftforge.common.capabilities.Capability;
@@ -38,6 +38,7 @@ import net.minecraftforge.eventbus.api.SubscribeEvent;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
+import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -61,7 +62,7 @@ public final class PlacedBlocks {
     private static final Map<PistonKey, PistonPlan> PISTON_PLANS = new HashMap<>();
 
     private record PistonKey(ResourceKey<Level> dimension, long pos) {}
-    private record PistonPlan(Direction moveDir, List<BlockPos> markedSources) {}
+    private record PistonPlan(Direction moveDir, Map<BlockPos, BlockState> markedSources) {}
 
     public static final class Store {
         final LongOpenHashSet positions = new LongOpenHashSet();
@@ -158,20 +159,25 @@ public final class PlacedBlocks {
         }
     }
 
+    /**
+     * The vanilla PistonStructureResolver can't be used here: on retract the piston head is
+     * still in place during Pre and blocks the resolution. Instead collect an over-approximation
+     * of blocks that could move, and in Post keep only those that really became a moving block.
+     */
     @SubscribeEvent(priority = EventPriority.LOWEST)
     public static void onPistonPre(PistonEvent.Pre event) {
         if (!(event.getLevel() instanceof Level level) || level.isClientSide()) return;
-        PistonStructureResolver resolver = event.getStructureHelper();
-        if (resolver == null || !resolver.resolve()) return;
-        for (BlockPos pos : resolver.getToDestroy()) {
-            if (isPlaced(level, pos)) queueCheck(level, pos);
-        }
-        List<BlockPos> marked = new ArrayList<>();
-        for (BlockPos pos : resolver.getToPush()) {
-            if (isPlaced(level, pos)) marked.add(pos.immutable());
+        boolean extend = event.getPistonMoveType().isExtend;
+        Direction facing = event.getDirection();
+        Direction moveDir = extend ? facing : facing.getOpposite();
+        BlockPos start = event.getPos().relative(facing, extend ? 1 : 2);
+        Map<BlockPos, BlockState> marked = new HashMap<>();
+        for (BlockPos pos : movableCandidates(level, start, moveDir, event.getPos())) {
+            if (!isPlaced(level, pos)) continue;
+            marked.put(pos, level.getBlockState(pos));
+            queueCheck(level, pos); // also covers blocks the piston destroys instead of moving
         }
         if (marked.isEmpty()) return;
-        Direction moveDir = event.getPistonMoveType().isExtend ? event.getDirection() : event.getDirection().getOpposite();
         PISTON_PLANS.put(new PistonKey(level.dimension(), event.getPos().asLong()), new PistonPlan(moveDir, marked));
     }
 
@@ -180,14 +186,52 @@ public final class PlacedBlocks {
         if (!(event.getLevel() instanceof Level level) || level.isClientSide()) return;
         PistonPlan plan = PISTON_PLANS.remove(new PistonKey(level.dimension(), event.getPos().asLong()));
         if (plan == null) return;
-        // Vanilla may still skip the move (e.g. non-sticky retract); only blocks now in
-        // transit (moving_piston at the destination) actually moved.
+        // A block moved iff a fresh moving block carrying it now sits one step ahead.
         List<BlockPos> moved = new ArrayList<>();
-        for (BlockPos src : plan.markedSources()) {
-            if (level.getBlockState(src.relative(plan.moveDir())).is(Blocks.MOVING_PISTON)) moved.add(src);
-        }
+        plan.markedSources().forEach((src, state) -> {
+            if (level.getBlockEntity(src.relative(plan.moveDir())) instanceof PistonMovingBlockEntity moving
+                    && !moving.isSourcePiston()
+                    && moving.getMovementDirection() == plan.moveDir()
+                    && moving.getMovedState().is(state.getBlock())) {
+                moved.add(src);
+            }
+        });
         for (BlockPos src : moved) set(level, src, false);
         for (BlockPos src : moved) mark(level, src.relative(plan.moveDir()));
+    }
+
+    /** Vanilla moves at most 12 blocks, each reachable from the start within 12 steps. */
+    private static final int MAX_DEPTH = 13;
+    private static final int MAX_CANDIDATES = 1024;
+
+    /**
+     * Every block a piston could move: the start block, blocks pushed ahead of a moving block,
+     * and anything next to a sticky (slime/honey) block. Over-approximates; Post verifies.
+     */
+    private static List<BlockPos> movableCandidates(Level level, BlockPos start, Direction moveDir, BlockPos piston) {
+        List<BlockPos> result = new ArrayList<>();
+        Map<BlockPos, Integer> depth = new HashMap<>();
+        ArrayDeque<BlockPos> queue = new ArrayDeque<>();
+        depth.put(start, 0);
+        queue.add(start);
+        while (!queue.isEmpty() && result.size() < MAX_CANDIDATES) {
+            BlockPos pos = queue.poll();
+            int d = depth.get(pos);
+            if (pos.equals(piston) || !level.hasChunkAt(pos)) continue;
+            BlockState state = level.getBlockState(pos);
+            if (state.isAir() || state.is(Blocks.PISTON_HEAD) || state.is(Blocks.MOVING_PISTON)) continue;
+            result.add(pos);
+            if (d >= MAX_DEPTH) continue;
+            List<BlockPos> next = new ArrayList<>();
+            next.add(pos.relative(moveDir));
+            if (state.isStickyBlock()) {
+                for (Direction dir : Direction.values()) next.add(pos.relative(dir));
+            }
+            for (BlockPos n : next) {
+                if (depth.putIfAbsent(n, d + 1) == null) queue.add(n);
+            }
+        }
+        return result;
     }
 
     /** A placed gravity block (sand, anvil...) starts falling: remember it on the entity. */
