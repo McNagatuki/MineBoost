@@ -1,0 +1,7 @@
+{
+  "replace": false,
+  "values": [
+    { "id": "#minecraft:shulker_boxes", "required": false },
+    { "id": "#minecraft:anvil", "required": false }
+  ]
+}
